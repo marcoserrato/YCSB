@@ -19,9 +19,7 @@
 package site.ycsb.postgrenosql;
 
 import site.ycsb.*;
-import org.json.simple.JSONObject;
 import org.postgresql.Driver;
-import org.postgresql.util.PGobject;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -213,16 +211,16 @@ public class PostgreNoSQLDBClient extends DB {
         updateStatement = createAndCacheUpdateStatement(type);
       }
 
-      JSONObject jsonObject = new JSONObject();
-      for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        jsonObject.put(entry.getKey(), entry.getValue().toString());
-      }
+      // JSONObject jsonObject = new JSONObject();
+      // for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
+      //   jsonObject.put(entry.getKey(), entry.getValue().toString());
+      // }
 
-      PGobject object = new PGobject();
-      object.setType("jsonb");
-      object.setValue(jsonObject.toJSONString());
+      // PGobject object = new PGobject();
+      // object.setType("bytea");
+      // object.setValue(jsonObject.toJSONString());
+      updateStatement.setBytes(1, values.values().iterator().next().toArray());
 
-      updateStatement.setObject(1, object);
       updateStatement.setString(2, key);
 
       int result = updateStatement.executeUpdate();
@@ -245,16 +243,13 @@ public class PostgreNoSQLDBClient extends DB {
         insertStatement = createAndCacheInsertStatement(type);
       }
 
-      JSONObject jsonObject = new JSONObject();
-      for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        jsonObject.put(entry.getKey(), entry.getValue().toString());
-      }
+      // JSONObject jsonObject = new JSONObject();
+      // for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
+      //   jsonObject.put(entry.getKey(), entry.getValue().toString());
+      // }
 
-      PGobject object = new PGobject();
-      object.setType("jsonb");
-      object.setValue(jsonObject.toJSONString());
+      insertStatement.setBytes(2, values.values().iterator().next().toArray());
 
-      insertStatement.setObject(2, object);
       insertStatement.setString(1, key);
 
       int result = insertStatement.executeUpdate();
@@ -304,14 +299,14 @@ public class PostgreNoSQLDBClient extends DB {
   private String createReadStatement(StatementType readType){
     StringBuilder read = new StringBuilder("SELECT " + PRIMARY_KEY + " AS " + PRIMARY_KEY);
 
-    if (readType.getFields() == null) {
-      read.append(", (jsonb_each_text(" + COLUMN_NAME + ")).*");
-    } else {
-      for (String field:readType.getFields()){
-        read.append(", " + COLUMN_NAME + "->>'" + field + "' AS " + field);
-      }
-    }
-
+    // if (readType.getFields() == null) {
+    //   read.append(", (jsonb_each_text(" + COLUMN_NAME + ")).*");
+    // } else {
+    //   for (String field:readType.getFields()){
+    //     read.append(", " + COLUMN_NAME + "->>'" + field + "' AS " + field);
+    //   }
+    // }
+    read.append(", " + COLUMN_NAME);
     read.append(" FROM " + readType.getTableName());
     read.append(" WHERE ");
     read.append(PRIMARY_KEY);
@@ -357,6 +352,14 @@ public class PostgreNoSQLDBClient extends DB {
     }
     return statement;
   }
+
+  // private String createInsertOnConflictStatement(StatementType updateType) {
+  //   StringBuilder insertOnConflict = new StringBuiler("INSERT INTO ");
+  //   insertOnConflict.append(updateType.getTableName());
+  //   insertOnConflict.append(" (" + PRIMARY_KEY + "," + COLUMN_NAME + ") ");
+  //   insertOnConflict.append("VALUES (?) ON CONFLICT (" + PRIMARY_KEY + ")");
+
+  // }
 
   private String createUpdateStatement(StatementType updateType){
     StringBuilder update = new StringBuilder("UPDATE ");
