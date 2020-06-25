@@ -133,6 +133,36 @@ public class PostgreNoSQLDBClient extends DB {
   }
 
   @Override
+  public Status batchRead(String tableName, String[] keys, Map<String, ByteIterator> results) {
+    try {
+      StatementType type = new StatementType(StatementType.Type.SCAN, tableName, null);
+      PreparedStatement batchReadStatement = cachedStatements.get(type);
+      if (batchReadStatement == null) {
+        batchReadStatement = createAndCacheBatchReadStatement(type, keys.length);
+      }
+
+      StringBuilder r = new StringBuilder("(");
+      r.append(String.join(", ", keys));
+      r.append(")");
+
+      // batchReadStatement.setArray(1, connection.createArrayOf("varchar", keys));
+      batchReadStatement.setString(1, r.toString());
+      for(int i = 1; i <= keys.length; i++) {
+        batchReadStatement.setString(i, keys[i-1]);
+      }
+
+      ResultSet resultSet = batchReadStatement.executeQuery();
+
+      resultSet.close();
+      return Status.OK;
+
+    } catch (SQLException e) {
+      LOG.error("Error in processing batchRead of table: " + tableName + ": " + e);
+      return Status.ERROR;
+    }
+  }
+
+  @Override
   public Status read(String tableName, String key, Set<String> fields, Map<String, ByteIterator> result) {
     try {
       StatementType type = new StatementType(StatementType.Type.READ, tableName, fields);
@@ -234,6 +264,37 @@ public class PostgreNoSQLDBClient extends DB {
     }
   }
 
+  public Status batchUpdate(String tableName, String[] keys, Map<String, ByteIterator> values) {
+    try {
+      StatementType type = new StatementType(StatementType.Type.UPDATE, tableName, null);
+      PreparedStatement updateStatement = cachedStatements.get(type);
+      if (updateStatement == null) {
+        updateStatement = createAndCacheUpdateStatement(type);
+      }
+
+      for (String key : keys) {
+        updateStatement.setBytes(1, values.get(key).toArray());
+        updateStatement.setString(2, key);
+        updateStatement.addBatch();
+      }
+
+      int[] results = updateStatement.executeBatch();
+      boolean fresult = true;
+      for(int result : results) {
+        fresult = fresult && (result == 1);
+      }
+
+      if (fresult) {
+        return Status.OK;
+      }
+      return Status.UNEXPECTED_STATE;
+    } catch (SQLException e) {
+      LOG.error("Error in processing insert to table: " + tableName + ": " + e);
+      return Status.ERROR;
+    }
+  }
+
+
   @Override
   public Status insert(String tableName, String key, Map<String, ByteIterator> values) {
     try{
@@ -284,6 +345,27 @@ public class PostgreNoSQLDBClient extends DB {
       LOG.error("Error in processing delete to table: " + tableName + e);
       return Status.ERROR;
     }
+  }
+
+  private PreparedStatement createAndCacheBatchReadStatement(StatementType batchReadType, int size)
+    throws SQLException {
+    PreparedStatement batchRead = connection.prepareStatement(createBatchReadStatement(batchReadType, size));
+    PreparedStatement statement = cachedStatements.putIfAbsent(batchReadType, batchRead);
+    if(statement == null) {
+      return batchRead;
+    }
+    return statement;
+  }
+
+  private String createBatchReadStatement(StatementType batchReadType, int size) {
+    StringBuilder read = new StringBuilder("SELECT " + PRIMARY_KEY + " AS " + PRIMARY_KEY);
+    read.append(", " + COLUMN_NAME);
+    read.append(" FROM " + batchReadType.getTableName());
+    read.append(" WHERE " + PRIMARY_KEY + " IN (");
+    read.append(String.join(",", Collections.nCopies(size, "?")));
+    read.append(")");
+
+    return read.toString();
   }
 
   private PreparedStatement createAndCacheReadStatement(StatementType readType)

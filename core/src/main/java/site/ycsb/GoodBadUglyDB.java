@@ -158,4 +158,12 @@ public class GoodBadUglyDB extends DB {
     delay();
     return Status.OK;
   }
+  public Status batchRead(String table, String[] keys, Map<String, ByteIterator> results) {
+    System.out.print("Don't use this");
+    return Status.ERROR;
+  }
+  public Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values) {
+    System.out.print("Don't use this");
+    return Status.ERROR;
+  }
 }

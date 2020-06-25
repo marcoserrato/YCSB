@@ -78,6 +78,10 @@ public class CoreWorkload extends Workload {
 
   protected String table;
 
+  public static final String BATCH_SIZE_PROPERTY = "batchsize";
+  public static final String BATCH_SIZE_PROPERTY_DEFAULT = "500";
+  protected int batchsize;
+
   /**
    * The name of the property for the number of fields in a record.
    */
@@ -185,6 +189,10 @@ public class CoreWorkload extends Workload {
    */
   private boolean dataintegrity;
 
+
+  public static final String BULKREADMODIFYWRITE_PROPORTION_PROPERTY = "bulkreadmodifywriteproportion";
+
+  public static final String BULKREADMODIFYWRITE_PROPORTION_PROPERTY_DEFAULT = "0.0";
   /**
    * The name of the property for the proportion of transactions that are reads.
    */
@@ -394,6 +402,7 @@ public class CoreWorkload extends Workload {
   public void init(Properties p) throws WorkloadException {
     table = p.getProperty(TABLENAME_PROPERTY, TABLENAME_PROPERTY_DEFAULT);
 
+    batchsize = Integer.parseInt(p.getProperty(BATCH_SIZE_PROPERTY, BATCH_SIZE_PROPERTY_DEFAULT));
     fieldcount =
         Long.parseLong(p.getProperty(FIELD_COUNT_PROPERTY, FIELD_COUNT_PROPERTY_DEFAULT));
     final String fieldnameprefix = p.getProperty(FIELD_NAME_PREFIX, FIELD_NAME_PREFIX_DEFAULT);
@@ -652,6 +661,9 @@ public class CoreWorkload extends Workload {
     case "SCAN":
       doTransactionScan(db);
       break;
+    case "BULKREADMODIFYWRITE":
+      doTransactionBatchReadModifyWrite(db);
+      break;
     default:
       doTransactionReadModifyWrite(db);
     }
@@ -724,6 +736,34 @@ public class CoreWorkload extends Workload {
     if (dataintegrity) {
       verifyRow(keyname, cells);
     }
+  }
+
+  public void doTransactionBatchReadModifyWrite(DB db) {
+    String[] keys = new String[batchsize];
+    for(int i = 0; i < keys.length; i++) {
+      keys[i] = buildKeyName(nextKeynum());
+    }
+
+    HashMap<String, ByteIterator> values = new HashMap(batchsize);
+
+    for(String key : keys) {
+      ByteIterator data = new RandomByteIterator(fieldlengthgenerator.nextValue().longValue());
+      values.put(key, data);
+    }
+
+    HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
+
+    long ist = measurements.getIntendedtartTimeNs();
+    long st = System.nanoTime();
+
+    db.batchRead(table, keys, cells);
+
+    db.batchUpdate(table, keys, values);
+
+    long en = System.nanoTime();
+
+    measurements.measure("BATCH-READ-MODIFY-WRITE", (int) ((en - st) / 1000));
+    measurements.measureIntended("BATCH-READ-MODIFY-WRITE", (int) ((en - ist) / 1000));
   }
 
   public void doTransactionReadModifyWrite(DB db) {
@@ -852,6 +892,8 @@ public class CoreWorkload extends Workload {
         p.getProperty(SCAN_PROPORTION_PROPERTY, SCAN_PROPORTION_PROPERTY_DEFAULT));
     final double readmodifywriteproportion = Double.parseDouble(p.getProperty(
         READMODIFYWRITE_PROPORTION_PROPERTY, READMODIFYWRITE_PROPORTION_PROPERTY_DEFAULT));
+    final double bulkreadmodifywriteproportion = Double.parseDouble(p.getProperty(
+        BULKREADMODIFYWRITE_PROPORTION_PROPERTY, BULKREADMODIFYWRITE_PROPORTION_PROPERTY_DEFAULT));
 
     final DiscreteGenerator operationchooser = new DiscreteGenerator();
     if (readproportion > 0) {
@@ -872,6 +914,10 @@ public class CoreWorkload extends Workload {
 
     if (readmodifywriteproportion > 0) {
       operationchooser.addValue(readmodifywriteproportion, "READMODIFYWRITE");
+    }
+
+    if (bulkreadmodifywriteproportion > 0) {
+      operationchooser.addValue(bulkreadmodifywriteproportion, "BULKREADMODIFYWRITE");
     }
     return operationchooser;
   }

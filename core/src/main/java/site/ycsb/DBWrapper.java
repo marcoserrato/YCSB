@@ -48,6 +48,8 @@ public class DBWrapper extends DB {
   private final String scopeStringRead;
   private final String scopeStringScan;
   private final String scopeStringUpdate;
+  private final String scopeStringBulkRead;
+  private final String scopeStringBulkUpdate;
 
   public DBWrapper(final DB db, final Tracer tracer) {
     this.db = db;
@@ -61,6 +63,8 @@ public class DBWrapper extends DB {
     scopeStringRead = simple + "#read";
     scopeStringScan = simple + "#scan";
     scopeStringUpdate = simple + "#update";
+    scopeStringBulkRead = simple + "#bulkread";
+    scopeStringBulkUpdate = simple + "#bulkupdate";
   }
 
   /**
@@ -241,6 +245,30 @@ public class DBWrapper extends DB {
       long en = System.nanoTime();
       measure("DELETE", res, ist, st, en);
       measurements.reportStatus("DELETE", res);
+      return res;
+    }
+  }
+
+  public Status batchRead(String table, String[] keys, Map<String, ByteIterator> results) {
+    try (final TraceScope span = tracer.newScope(scopeStringBulkRead)) {
+      long ist = measurements.getIntendedtartTimeNs();
+      long st = System.nanoTime();
+      Status res = db.batchRead(table, keys, results);
+      long en = System.nanoTime();
+      measure("BULK-READ", res, ist, st, en);
+      measurements.reportStatus("BULK-READ", res);
+      return res;
+    }
+  }
+
+  public Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values) {
+    try (final TraceScope span = tracer.newScope(scopeStringBulkUpdate)) {
+      long ist = measurements.getIntendedtartTimeNs();
+      long st = System.nanoTime();
+      Status res = db.batchUpdate(table, keys, values);
+      long en = System.nanoTime();
+      measure("BULK-UPDATE", res, ist, st, en);
+      measurements.reportStatus("BULK-UPDATE", res);
       return res;
     }
   }
