@@ -153,6 +153,13 @@ public class PostgreNoSQLDBClient extends DB {
 
       ResultSet resultSet = batchReadStatement.executeQuery();
 
+      while(resultSet.next()) {
+        results.put(
+                    resultSet.getString(PRIMARY_KEY),
+                    new StringByteIterator(resultSet.getString(COLUMN_NAME))
+                    )
+      }
+
       resultSet.close();
       return Status.OK;
 
