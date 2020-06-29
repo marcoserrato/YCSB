@@ -77,7 +77,6 @@ public final class Client {
   private Client() {
     //not used
   }
-
   public static final String DEFAULT_RECORD_COUNT = "0";
 
   /**
@@ -422,6 +421,7 @@ public final class Client {
         threadcount = opcount;
         System.out.println("Warning: the threadcount is bigger than recordcount, the threadcount will be recordcount!");
       }
+
       for (int threadid = 0; threadid < threadcount; threadid++) {
         DB db;
         try {

@@ -78,8 +78,11 @@ public class CoreWorkload extends Workload {
 
   protected String table;
 
+  public static final String THREAD_COUNT_PROPERTY = "threadcount";
+  public static final String THREAD_COUNT_PROPERTY_DEFAULT = "1";
+
   public static final String BATCH_SIZE_PROPERTY = "batchsize";
-  public static final String BATCH_SIZE_PROPERTY_DEFAULT = "500";
+  public static final String BATCH_SIZE_PROPERTY_DEFAULT = "10";
   protected int batchsize;
 
   /**
@@ -361,6 +364,7 @@ public class CoreWorkload extends Workload {
   protected int zeropadding;
   protected int insertionRetryLimit;
   protected int insertionRetryInterval;
+  protected long threadcount;
 
   private Measurements measurements = Measurements.getMeasurements();
 
@@ -401,6 +405,8 @@ public class CoreWorkload extends Workload {
   @Override
   public void init(Properties p) throws WorkloadException {
     table = p.getProperty(TABLENAME_PROPERTY, TABLENAME_PROPERTY_DEFAULT);
+
+    threadcount = Long.parseLong(p.getProperty(THREAD_COUNT_PROPERTY, THREAD_COUNT_PROPERTY_DEFAULT));
 
     batchsize = Integer.parseInt(p.getProperty(BATCH_SIZE_PROPERTY, BATCH_SIZE_PROPERTY_DEFAULT));
     fieldcount =
@@ -467,6 +473,8 @@ public class CoreWorkload extends Workload {
     transactioninsertkeysequence = new AcknowledgedCounterGenerator(recordcount);
     if (requestdistrib.compareTo("uniform") == 0) {
       keychooser = new UniformLongGenerator(insertstart, insertstart + insertcount - 1);
+    } else if (requestdistrib.compareTo("special") == 0) {
+      keychooser = new BucketGenerator(insertstart, insertstart + insertcount - 1, threadcount);
     } else if (requestdistrib.compareTo("exponential") == 0) {
       double percentile = Double.parseDouble(p.getProperty(
           ExponentialGenerator.EXPONENTIAL_PERCENTILE_PROPERTY,
@@ -739,10 +747,19 @@ public class CoreWorkload extends Workload {
   }
 
   public void doTransactionBatchReadModifyWrite(DB db) {
-    String[] keys = new String[batchsize];
-    for(int i = 0; i < keys.length; i++) {
-      keys[i] = buildKeyName(nextKeynum());
+    StringBuilder sb = new StringBuilder();
+    HashSet<String> hsKeys = new HashSet();
+
+    int iter = 0;
+    // Try to fill the batch with as many keys as possible
+    while((iter < batchsize * 3) && hsKeys.size() < batchsize) {
+      hsKeys.add(buildKeyName(nextKeynum()));
+      iter++;
     }
+
+    String[] keys = new String[hsKeys.size()];
+    hsKeys.toArray(keys);
+    //System.out.println("Thread: " + Thread.currentThread().getName() + " Keys: " + String.join(", ", keys));
 
     HashMap<String, ByteIterator> values = new HashMap(batchsize);
 
@@ -756,11 +773,20 @@ public class CoreWorkload extends Workload {
     long ist = measurements.getIntendedtartTimeNs();
     long st = System.nanoTime();
 
+    System.out.println("Thread: " + Thread.currentThread().getName() + " About to read");
     db.batchRead(table, keys, cells);
+    System.out.println("Thread: " + Thread.currentThread().getName() + " About to write");
 
     db.batchUpdate(table, keys, values);
+    System.out.println("Thread: " + Thread.currentThread().getName() + " About to done");
 
     long en = System.nanoTime();
+
+    if (cells.keySet().size() != keys.length) {
+      System.err.format("Batch read did not return correct key count! read: %d / keys: %d",
+                         cells.keySet().size(),
+                         keys.length);
+    }
 
     measurements.measure("BATCH-READ-MODIFY-WRITE", (int) ((en - st) / 1000));
     measurements.measureIntended("BATCH-READ-MODIFY-WRITE", (int) ((en - ist) / 1000));

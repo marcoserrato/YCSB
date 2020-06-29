@@ -151,7 +151,10 @@ public class PostgreNoSQLDBClient extends DB {
         batchReadStatement.setString(i, keys[i-1]);
       }
 
+      
+      System.out.println("Thread: " + Thread.currentThread().getName() + "Executing");
       ResultSet resultSet = batchReadStatement.executeQuery();
+      System.out.println("Thread: " + Thread.currentThread().getName() + "Done .. Executing");
 
       resultSet.close();
       return Status.OK;
