@@ -773,9 +773,7 @@ public class CoreWorkload extends Workload {
     long ist = measurements.getIntendedtartTimeNs();
     long st = System.nanoTime();
 
-    System.out.println("Thread: " + Thread.currentThread().getName() + " About to read");
     db.batchRead(table, keys, cells);
-    System.out.println("Thread: " + Thread.currentThread().getName() + " About to write");
 
     db.batchUpdate(table, keys, values);
     System.out.println("Thread: " + Thread.currentThread().getName() + " About to done");
