@@ -157,7 +157,7 @@ public class PostgreNoSQLDBClient extends DB {
         results.put(
                     resultSet.getString(PRIMARY_KEY),
                     new StringByteIterator(resultSet.getString(COLUMN_NAME))
-                    )
+                    );
       }
 
       resultSet.close();
