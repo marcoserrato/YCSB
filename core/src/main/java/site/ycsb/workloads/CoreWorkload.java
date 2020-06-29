@@ -759,7 +759,7 @@ public class CoreWorkload extends Workload {
 
     String[] keys = new String[hsKeys.size()];
     hsKeys.toArray(keys);
-    //System.out.println("Thread: " + Thread.currentThread().getName() + " Keys: " + String.join(", ", keys));
+    System.out.println("Thread: " + Thread.currentThread().getName() + " Keys: " + String.join(", ", keys));
 
     HashMap<String, ByteIterator> values = new HashMap(batchsize);
 
