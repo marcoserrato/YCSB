@@ -262,8 +262,13 @@ public class JdbcDBClient extends DB {
 
   public Status batchRead(String tableName, String[] keys, Map<String, ByteIterator> results) {
     try {
-      PreparedStatement readStatement = getShardConnectionByKey(keys[0])
-              .prepareStatement(createBatchReadStatement(tableName, routerBatchsize));
+      StatementType type = new StatementType(StatementType.Type.BREAD, tableName,
+                                             1, "FIELD0", getShardIndexByKey(keys[0]));
+
+      PreparedStatement readStatement = cachedStatements.get(type);
+      if (readStatement == null) {
+        readStatement = createAndCacheBatchReadStatement(type, keys[0]);
+      }
 
       for(int i = 1; i <= keys.length; i++) {
         readStatement.setString(i, keys[i-1]);
@@ -288,9 +293,13 @@ public class JdbcDBClient extends DB {
 
   public Status batchUpdate(String tableName, String[] keys, Map<String, ByteIterator> values) {
     try {
-      PreparedStatement updateStatement = getShardConnectionByKey(keys[0])
-          .prepareStatement(createBatchUpdateStatement(tableName, routerBatchsize));
+      StatementType type = new StatementType(StatementType.Type.BUPDATE, tableName,
+                                             1, "FIELD0", getShardIndexByKey(keys[0]));
 
+      PreparedStatement updateStatement = cachedStatements.get(type);
+      if (updateStatement == null) {
+        updateStatement = createAndCacheBatchUpdateStatement(type, keys[0]);
+      }
 
       for(int i = 1; i <= keys.length * 2; i = i + 2) {
         String key = keys[(i-1)/2];
@@ -389,6 +398,28 @@ public class JdbcDBClient extends DB {
     PreparedStatement stmt = cachedStatements.putIfAbsent(scanType, scanStatement);
     if (stmt == null) {
       return scanStatement;
+    }
+    return stmt;
+  }
+
+  private PreparedStatement createAndCacheBatchReadStatement(StatementType type, String key)
+    throws SQLException {
+    String bread = createBatchReadStatement(type);
+    PreparedStatement breadStatement = getShardConnectionByKey(key).prepareStatement(bread);
+    PreparedStatement stmt = cachedStatements.putIfAbsent(type, breadStatement);
+    if (stmt == null) {
+      return breadStatement;
+    }
+    return stmt;
+  }
+
+  private PreparedStatement createAndCacheBatchUpdateStatement(StatementType type, String key)
+    throws SQLException {
+    String bupdate = createBatchUpdateStatement(type);
+    PreparedStatement bupdateStatement = getShardConnectionByKey(key).prepareStatement(bupdate);
+    PreparedStatement stmt = cachedStatements.putIfAbsent(type, bupdateStatement);
+    if (stmt == null) {
+      return bupdateStatement;
     }
     return stmt;
   }
@@ -589,22 +620,21 @@ public class JdbcDBClient extends DB {
     return new OrderedFieldInfo(fieldKeys, fieldValues);
   }
 
-  private String createBatchReadStatement(String table, int size) {
+  private String createBatchReadStatement(StatementType type) {
     StringBuilder read = new StringBuilder("SELECT YCSB_KEY AS YCSB_KEY");
     read.append(", FIELD0");
-    read.append(" FROM " + table);
+    read.append(" FROM " + type.getTableName());
     read.append(" WHERE YCSB_KEY IN (");
-    read.append(String.join(",", Collections.nCopies(size, "?")));
+    read.append(String.join(",", Collections.nCopies(routerBatchsize, "?")));
     read.append(")");
 
     return read.toString();
   }
 
-  private String createBatchUpdateStatement(String table, int size) {
-    StringBuilder update = new StringBuilder("INSERT INTO " + table + "(YCSB_KEY, FIELD0) VALUES ");
-    update.append(String.join(", ", Collections.nCopies(size, "(?, ?)")));
+  private String createBatchUpdateStatement(StatementType type) {
+    StringBuilder update = new StringBuilder("INSERT INTO " + type.getTableName() + " (YCSB_KEY, FIELD0) VALUES ");
+    update.append(String.join(", ", Collections.nCopies(routerBatchsize, "(?, ?)")));
     update.append(" ON CONFLICT (YCSB_KEY) DO UPDATE SET FIELD0=EXCLUDED.FIELD0");
     return update.toString();
   }
-
 }
