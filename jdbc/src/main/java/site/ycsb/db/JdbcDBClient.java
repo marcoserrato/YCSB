@@ -82,11 +82,14 @@ public class JdbcDBClient extends DB {
   /** The field name prefix in the table. */
   public static final String COLUMN_PREFIX = "FIELD";
 
+  public static final String BATCH_SIZE_PROPERTY = "batchsize";
+
   /** SQL:2008 standard: FETCH FIRST n ROWS after the ORDER BY. */
   private boolean sqlansiScans = false;
   /** SQL Server before 2012: TOP n after the SELECT. */
   private boolean sqlserverScans = false;
 
+  private int routerBatchsize;
   private List<Connection> conns;
   private boolean initialized = false;
   private Properties props;
@@ -188,6 +191,8 @@ public class JdbcDBClient extends DB {
     String passwd = props.getProperty(CONNECTION_PASSWD, DEFAULT_PROP);
     String driver = props.getProperty(DRIVER_CLASS);
 
+    this.routerBatchsize = Integer.parseInt(props.getProperty(BATCH_SIZE_PROPERTY, "10"));
+
     this.jdbcFetchSize = getIntProperty(props, JDBC_FETCH_SIZE);
     this.batchSize = getIntProperty(props, DB_BATCH_SIZE);
 
@@ -252,6 +257,58 @@ public class JdbcDBClient extends DB {
     }
 
     initialized = true;
+  }
+
+
+  public Status batchRead(String tableName, String[] keys, Map<String, ByteIterator> results) {
+    try {
+      PreparedStatement readStatement = getShardConnectionByKey(keys[0])
+              .prepareStatement(createBatchReadStatement(tableName, routerBatchsize));
+
+      for(int i = 1; i <= keys.length; i++) {
+        readStatement.setString(i, keys[i-1]);
+      }
+
+      ResultSet resultSet = readStatement.executeQuery();
+
+      while(resultSet.next()) {
+        results.put(
+                    resultSet.getString("YCSB_KEY"),
+                    new StringByteIterator(resultSet.getString("FIELD0"))
+                    );
+      }
+
+      resultSet.close();
+      return Status.OK;
+    } catch (SQLException e) {
+      System.err.println("Error in processing batchRead of table: " + tableName + ": " + e);
+      return Status.ERROR;
+    }
+  }
+
+  public Status batchUpdate(String tableName, String[] keys, Map<String, ByteIterator> values) {
+    try {
+      PreparedStatement updateStatement = getShardConnectionByKey(keys[0])
+          .prepareStatement(createBatchUpdateStatement(tableName, routerBatchsize));
+
+
+      for(int i = 1; i <= keys.length * 2; i = i + 2) {
+        String key = keys[(i-1)/2];
+        updateStatement.setString(i, key);
+        updateStatement.setBytes(i+1, values.get(key).toArray());
+      }
+
+      int result = updateStatement.executeUpdate();
+
+      if(result == routerBatchsize) {
+        return Status.OK;
+      } else {
+        return Status.ERROR;
+      }
+    } catch (SQLException e) {
+      System.err.println("Error in processing insert to table: " + tableName + ": " + e);
+      return Status.ERROR;
+    }
   }
 
   @Override
@@ -442,7 +499,7 @@ public class JdbcDBClient extends DB {
       insertStatement.setString(1, key);
       int index = 2;
       for (String value: fieldInfo.getFieldValues()) {
-        insertStatement.setString(index++, value);
+        insertStatement.setBytes(index++, value.getBytes());
       }
       // Using the batch insert API
       if (batchUpdates) {
@@ -531,4 +588,23 @@ public class JdbcDBClient extends DB {
 
     return new OrderedFieldInfo(fieldKeys, fieldValues);
   }
+
+  private String createBatchReadStatement(String table, int size) {
+    StringBuilder read = new StringBuilder("SELECT YCSB_KEY AS YCSB_KEY");
+    read.append(", FIELD0");
+    read.append(" FROM " + table);
+    read.append(" WHERE YCSB_KEY IN (");
+    read.append(String.join(",", Collections.nCopies(size, "?")));
+    read.append(")");
+
+    return read.toString();
+  }
+
+  private String createBatchUpdateStatement(String table, int size) {
+    StringBuilder update = new StringBuilder("INSERT INTO " + table + "(YCSB_KEY, FIELD0) VALUES ");
+    update.append(String.join(", ", Collections.nCopies(size, "(?, ?)")));
+    update.append(" ON CONFLICT (YCSB_KEY) DO UPDATE SET FIELD0=EXCLUDED.FIELD0");
+    return update.toString();
+  }
+
 }

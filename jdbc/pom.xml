@@ -47,6 +47,13 @@ LICENSE file.
       <version>4.12</version>
       <scope>test</scope>
     </dependency>
+      <dependency>
+        <groupId>org.postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <version>42.2.14</version>
+        <scope>system</scope>
+        <systemPath>/path/to/jar</systemPath>
+      </dependency>
     <dependency>
       <groupId>org.hsqldb</groupId>
       <artifactId>hsqldb</artifactId>
