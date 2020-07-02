@@ -532,6 +532,14 @@ public class TestTimeSeriesWorkload {
       return Status.OK;
     }
 
+    public Status batchRead(String table, String[] keys, Map<String, ByteIterator> results) {
+      return Status.OK;
+    }
+    public Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values) {
+      return Status.OK;
+      
+    }
+
     @Override
     public Status update(String table, String key,
         Map<String, ByteIterator> values) {
