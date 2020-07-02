@@ -275,12 +275,12 @@ public class JdbcDBClient extends DB {
         readStatement.setString(i, keys[i-1]);
       }
       long en = System.nanoTime();
-      System.out.prinln("FORMULA: BATCH-READ " + (en - st));
+      System.out.println("FORMULA: BATCH-READ " + (en - st));
 
       long st2 = System.nanoTime();
       ResultSet resultSet = readStatement.executeQuery();
       long en2 = System.nanoTime();
-      System.out.prinln("BATCH-READ " + (en2 - st2));
+      System.out.println("BATCH-READ " + (en2 - st2));
       while(resultSet.next()) {
         results.put(
                     resultSet.getString("YCSB_KEY"),
