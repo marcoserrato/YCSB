@@ -637,10 +637,10 @@ public class CassandraCQLClient extends DB {
   }
 
   public Status batchRead(String table, String[] keys, Map<String, ByteIterator> results) {
-    read(table, keys[0], null, results);
+    return read(table, keys[0], null, results);
   }
   public Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values) {
-    update(table, keys[0], values);
+    return update(table, keys[0], values);
   }
 
 
