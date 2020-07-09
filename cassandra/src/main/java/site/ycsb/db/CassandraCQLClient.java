@@ -32,6 +32,7 @@ import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.querybuilder.QueryBuilder;
 import com.datastax.driver.core.querybuilder.Select;
 import com.datastax.driver.core.querybuilder.Update;
+import com.datastax.driver.core.ResultSetFuture;
 import site.ycsb.ByteArrayByteIterator;
 import site.ycsb.ByteIterator;
 import site.ycsb.DB;
@@ -44,6 +45,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.Vector;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -604,7 +607,6 @@ public class CassandraCQLClient extends DB {
    */
   @Override
   public Status delete(String table, String key) {
-
     try {
       PreparedStatement stmt = deleteStmt.get();
 
@@ -637,10 +639,55 @@ public class CassandraCQLClient extends DB {
   }
 
   public Status batchRead(String table, String[] keys, Map<String, ByteIterator> results) {
-    return read(table, keys[0], null, results);
+    PreparedStatement statement = session.prepare("SELECT * FROM usertable where y_id = ?");
+    statement.setConsistencyLevel(readConsistencyLevel);
+
+    List<ResultSetFuture> futures = new ArrayList<>();
+    for (String key : keys) {
+      ResultSetFuture resultSetFuture = session.executeAsync(statement.bind(key));
+      futures.add(resultSetFuture);
+    }
+
+    for (ResultSetFuture future : futures){
+      ResultSet rows = future.getUninterruptibly();
+      Row row = rows.one();
+      ByteBuffer val = row.getBytesUnsafe("field0");
+      String key = row.getString("y_id");
+      if (val != null) {
+        results.put(key, (new ByteArrayByteIterator(val.array())));
+      } else {
+        results.put(key, null);
+      }
+    }
+
+    if (results.values().size() == keys.length) {
+      return Status.OK;
+    } else {
+      return Status.ERROR;
+    }
+    //return read(table, keys[0], null, results);
   }
+
   public Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values) {
-    return update(table, keys[0], values);
+    Update update = QueryBuilder.update(table);
+    update.with(QueryBuilder.set("field0", QueryBuilder.bindMarker()));
+    update.where(QueryBuilder.eq(YCSB_KEY, QueryBuilder.bindMarker()));
+
+    PreparedStatement stmt = session.prepare(update);
+    stmt.setConsistencyLevel(writeConsistencyLevel);
+
+    List<ResultSetFuture> futures = new ArrayList<>();
+
+    for (String key: keys) {
+      ResultSetFuture resultSetFuture = session.executeAsync(stmt.bind(values.get(key).toString(), key));
+      futures.add(resultSetFuture);
+    }
+
+    for (ResultSetFuture f : futures) {
+      ResultSet r = f.getUninterruptibly();
+    }
+
+    return Status.OK;
   }
 
 
