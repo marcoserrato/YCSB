@@ -47,6 +47,8 @@ import java.util.Set;
 import java.util.Vector;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -90,7 +92,7 @@ public class CassandraCQLClient extends DB {
 
   public static final String YCSB_KEY = "y_id";
   public static final String KEYSPACE_PROPERTY = "cassandra.keyspace";
-  public static final String KEYSPACE_PROPERTY_DEFAULT = "ycsb";
+  public static final String KEYSPACE_PROPERTY_DEFAULT = "indexing_service_development";
   public static final String USERNAME_PROPERTY = "cassandra.username";
   public static final String PASSWORD_PROPERTY = "cassandra.password";
 
@@ -540,22 +542,47 @@ public class CassandraCQLClient extends DB {
    */
   @Override
   public Status insert(String table, String key, Map<String, ByteIterator> values) {
+    // Overriding for some badass testing!
+    /*
+      aggregate_id    : a stringify salsify uuid
+      organization_id :            "
+      current_version : int
+      epoch           : int
+      compressed      : bool
+      data            : blob
+      type            : string
+     */
 
     try {
-      Set<String> fields = values.keySet();
+      Set<String> fields = new HashSet<String>(
+                                               Arrays.asList("organization_id",
+                                                             "current_version",
+                                                             "epoch",
+                                                             "compressed",
+                                                             "data",
+                                                             "type")
+                                               );
       PreparedStatement stmt = insertStmts.get(fields);
 
       // Prepare statement on demand
       if (stmt == null) {
-        Insert insertStmt = QueryBuilder.insertInto(table);
+        Insert insertStmt = QueryBuilder.insertInto("current_aggregate_versions");
 
         // Add key
-        insertStmt.value(YCSB_KEY, QueryBuilder.bindMarker());
+        insertStmt.value("aggregate_id", QueryBuilder.bindMarker());
 
         // Add fields
-        for (String field : fields) {
-          insertStmt.value(field, QueryBuilder.bindMarker());
-        }
+
+        insertStmt.value("organization_id", QueryBuilder.bindMarker());
+        insertStmt.value("current_version", QueryBuilder.bindMarker());
+        insertStmt.value("epoch", QueryBuilder.bindMarker());
+        insertStmt.value("compressed", QueryBuilder.bindMarker());
+        insertStmt.value("data", QueryBuilder.bindMarker());
+        insertStmt.value("type", QueryBuilder.bindMarker());
+
+        // for (String field : fields) {
+        //   insertStmt.value(field, QueryBuilder.bindMarker());
+        // }
 
         stmt = session.prepare(insertStmt);
         stmt.setConsistencyLevel(writeConsistencyLevel);
@@ -577,20 +604,31 @@ public class CassandraCQLClient extends DB {
         }
       }
 
+
+      key = "s-" + UUID.randomUUID().toString();
       // Add key
       BoundStatement boundStmt = stmt.bind().setString(0, key);
 
+      System.out.println(key);
       // Add fields
-      ColumnDefinitions vars = stmt.getVariables();
-      for (int i = 1; i < vars.size(); i++) {
-        boundStmt.setString(i, values.get(vars.getName(i)).toString());
-      }
+      // ColumnDefinitions vars = stmt.getVariables();
+      // for (int i = 1; i < vars.size(); i++) {
+      //   boundStmt.setString(i, values.get(vars.getName(i)).toString());
+      // }
+
+      boundStmt.setString(1, "s-" + UUID.randomUUID().toString());
+      boundStmt.setInt(2, 1);
+      boundStmt.setInt(3, 1);
+      boundStmt.setBool(4, true);
+      boundStmt.setBytes(5, ByteBuffer.wrap(values.get("field0").toArray()));
+      boundStmt.setString(6, "product_aggregate");
 
       session.execute(boundStmt);
 
       return Status.OK;
     } catch (Exception e) {
       logger.error(MessageFormatter.format("Error inserting key: {}", key).getMessage(), e);
+      e.printStackTrace();
     }
 
     return Status.ERROR;
