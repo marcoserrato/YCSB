@@ -29,10 +29,12 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import java.sql.Connection;
+import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.UUID;
 
 /**
  * PostgreNoSQL client for YCSB framework.
@@ -304,8 +306,27 @@ public class PostgreNoSQLDBClient extends DB {
 
   @Override
   public Status insert(String tableName, String key, Map<String, ByteIterator> values) {
+      /*
+        aggregate_id    : a stringify salsify uuid
+        organization_id :            "
+        current_version : int
+        epoch           : int
+        compressed      : bool
+        data            : blob
+        type            : string
+      */
     try{
-      StatementType type = new StatementType(StatementType.Type.INSERT, tableName, null);
+
+      Set<String> fields = new HashSet<>();
+      fields.add("aggregate_id");
+      fields.add("organization_id");
+      fields.add("current_version");
+      fields.add("epoch");
+      fields.add("compressed");
+      fields.add("data");
+      fields.add("type");
+
+      StatementType type = new StatementType(StatementType.Type.INSERT, tableName, fields);
       PreparedStatement insertStatement = cachedStatements.get(type);
       if (insertStatement == null) {
         insertStatement = createAndCacheInsertStatement(type);
@@ -315,10 +336,13 @@ public class PostgreNoSQLDBClient extends DB {
       // for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
       //   jsonObject.put(entry.getKey(), entry.getValue().toString());
       // }
-
-      insertStatement.setBytes(2, values.values().iterator().next().toArray());
-
-      insertStatement.setString(1, key);
+      insertStatement.setString(1, "s-" + UUID.randomUUID().toString());
+      insertStatement.setString(2, "s-" + UUID.randomUUID().toString());
+      insertStatement.setInt(3, 1);
+      insertStatement.setInt(4, 1);
+      insertStatement.setBoolean(5, true);
+      insertStatement.setBytes(6, ByteBuffer.wrap(values.get("field0").toArray()).array());
+      insertStatement.setString(7, "product_aggregate");
 
       int result = insertStatement.executeUpdate();
       if (result == 1) {
@@ -475,8 +499,17 @@ public class PostgreNoSQLDBClient extends DB {
   private String createInsertStatement(StatementType insertType){
     StringBuilder insert = new StringBuilder("INSERT INTO ");
     insert.append(insertType.getTableName());
-    insert.append(" (" + PRIMARY_KEY + "," + COLUMN_NAME + ")");
-    insert.append(" VALUES(?,?)");
+    insert.append("(");
+    insert.append("aggregate_id,");
+    insert.append("organization_id,");
+    insert.append("current_version,");
+    insert.append("epoch,");
+    insert.append("compressed,");
+    insert.append("data,");
+    insert.append("type");
+    insert.append(")");
+
+    insert.append(" VALUES(?,?,?,?,?,?,?)");
     return insert.toString();
   }
 
