@@ -82,14 +82,11 @@ public class JdbcDBClient extends DB {
   /** The field name prefix in the table. */
   public static final String COLUMN_PREFIX = "FIELD";
 
-  public static final String BATCH_SIZE_PROPERTY = "batchsize";
-
   /** SQL:2008 standard: FETCH FIRST n ROWS after the ORDER BY. */
   private boolean sqlansiScans = false;
   /** SQL Server before 2012: TOP n after the SELECT. */
   private boolean sqlserverScans = false;
 
-  private int routerBatchsize;
   private List<Connection> conns;
   private boolean initialized = false;
   private Properties props;
@@ -191,8 +188,6 @@ public class JdbcDBClient extends DB {
     String passwd = props.getProperty(CONNECTION_PASSWD, DEFAULT_PROP);
     String driver = props.getProperty(DRIVER_CLASS);
 
-    this.routerBatchsize = Integer.parseInt(props.getProperty(BATCH_SIZE_PROPERTY, "10"));
-
     this.jdbcFetchSize = getIntProperty(props, JDBC_FETCH_SIZE);
     this.batchSize = getIntProperty(props, DB_BATCH_SIZE);
 
@@ -257,67 +252,6 @@ public class JdbcDBClient extends DB {
     }
 
     initialized = true;
-  }
-
-
-  public Status batchRead(String tableName, String[] keys, Map<String, ByteIterator> results) {
-    try {
-      StatementType type = new StatementType(StatementType.Type.BREAD, tableName,
-                                             1, "FIELD0", getShardIndexByKey(keys[0]));
-
-      PreparedStatement readStatement = cachedStatements.get(type);
-      if (readStatement == null) {
-        readStatement = createAndCacheBatchReadStatement(type, keys[0]);
-      }
-
-      for(int i = 1; i <= keys.length; i++) {
-        readStatement.setString(i, keys[i-1]);
-      }
-
-      ResultSet resultSet = readStatement.executeQuery();
-
-      while(resultSet.next()) {
-        results.put(
-                    resultSet.getString("YCSB_KEY"),
-                    new StringByteIterator(resultSet.getString("FIELD0"))
-                    );
-      }
-
-      resultSet.close();
-      return Status.OK;
-    } catch (SQLException e) {
-      System.err.println("Error in processing batchRead of table: " + tableName + ": " + e);
-      return Status.ERROR;
-    }
-  }
-
-  public Status batchUpdate(String tableName, String[] keys, Map<String, ByteIterator> values) {
-    try {
-      StatementType type = new StatementType(StatementType.Type.BUPDATE, tableName,
-                                             1, "FIELD0", getShardIndexByKey(keys[0]));
-
-      PreparedStatement updateStatement = cachedStatements.get(type);
-      if (updateStatement == null) {
-        updateStatement = createAndCacheBatchUpdateStatement(type, keys[0]);
-      }
-
-      for(int i = 1; i <= keys.length * 2; i = i + 2) {
-        String key = keys[(i-1)/2];
-        updateStatement.setString(i, key);
-        updateStatement.setBytes(i+1, values.get(key).toArray());
-      }
-
-      int result = updateStatement.executeUpdate();
-
-      if(result == routerBatchsize) {
-        return Status.OK;
-      } else {
-        return Status.ERROR;
-      }
-    } catch (SQLException e) {
-      System.err.println("Error in processing insert to table: " + tableName + ": " + e);
-      return Status.ERROR;
-    }
   }
 
   @Override
