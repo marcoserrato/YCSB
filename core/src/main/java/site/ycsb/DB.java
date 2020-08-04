@@ -56,8 +56,6 @@ public abstract class DB {
 
   }
 
-  public abstract Status batchRead(String table, String[] keys, Map<String, ByteIterator> results);
-  public abstract Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values);
   /**
    * Get the set of properties for this DB.
    */

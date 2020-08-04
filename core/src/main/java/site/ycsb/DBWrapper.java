@@ -248,28 +248,4 @@ public class DBWrapper extends DB {
       return res;
     }
   }
-
-  public Status batchRead(String table, String[] keys, Map<String, ByteIterator> results) {
-    try (final TraceScope span = tracer.newScope(scopeStringBulkRead)) {
-      long ist = measurements.getIntendedtartTimeNs();
-      long st = System.nanoTime();
-      Status res = db.batchRead(table, keys, results);
-      long en = System.nanoTime();
-      measure("BULK-READ", res, ist, st, en);
-      measurements.reportStatus("BULK-READ", res);
-      return res;
-    }
-  }
-
-  public Status batchUpdate(String table, String[] keys, Map<String, ByteIterator> values) {
-    try (final TraceScope span = tracer.newScope(scopeStringBulkUpdate)) {
-      long ist = measurements.getIntendedtartTimeNs();
-      long st = System.nanoTime();
-      Status res = db.batchUpdate(table, keys, values);
-      long en = System.nanoTime();
-      measure("BULK-UPDATE", res, ist, st, en);
-      measurements.reportStatus("BULK-UPDATE", res);
-      return res;
-    }
-  }
 }

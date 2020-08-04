@@ -669,9 +669,6 @@ public class CoreWorkload extends Workload {
     case "SCAN":
       doTransactionScan(db);
       break;
-    case "BULKREADMODIFYWRITE":
-      doTransactionBatchReadModifyWrite(db);
-      break;
     default:
       doTransactionReadModifyWrite(db);
     }
@@ -744,48 +741,6 @@ public class CoreWorkload extends Workload {
     if (dataintegrity) {
       verifyRow(keyname, cells);
     }
-  }
-
-  public void doTransactionBatchReadModifyWrite(DB db) {
-    StringBuilder sb = new StringBuilder();
-    HashSet<String> hsKeys = new HashSet();
-
-    int iter = 0;
-    // Try to fill the batch with as many keys as possible
-    while((iter < batchsize * 3) && hsKeys.size() < batchsize) {
-      hsKeys.add(buildKeyName(nextKeynum()));
-      iter++;
-    }
-
-    String[] keys = new String[hsKeys.size()];
-    hsKeys.toArray(keys);
-
-    HashMap<String, ByteIterator> values = new HashMap(batchsize);
-
-    for(String key : keys) {
-      ByteIterator data = new RandomByteIterator(fieldlengthgenerator.nextValue().longValue());
-      values.put(key, data);
-    }
-
-    HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
-
-    long ist = measurements.getIntendedtartTimeNs();
-    long st = System.nanoTime();
-
-    db.batchRead(table, keys, cells);
-
-    db.batchUpdate(table, keys, values);
-
-    long en = System.nanoTime();
-
-    if (cells.keySet().size() != keys.length) {
-      System.err.format("Batch read did not return correct key count! read: %d / keys: %d",
-                         cells.keySet().size(),
-                         keys.length);
-    }
-
-    measurements.measure("BATCH-READ-MODIFY-WRITE", (int) ((en - st) / 1000));
-    measurements.measureIntended("BATCH-READ-MODIFY-WRITE", (int) ((en - ist) / 1000));
   }
 
   public void doTransactionReadModifyWrite(DB db) {
