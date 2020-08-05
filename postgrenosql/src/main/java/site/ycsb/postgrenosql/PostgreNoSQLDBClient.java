@@ -135,8 +135,6 @@ public class PostgreNoSQLDBClient extends DB {
   }
 
   @Override
-
-  @Override
   public Status read(String tableName, String key, Set<String> fields, Map<String, ByteIterator> result) {
     try {
       StatementType type = new StatementType(StatementType.Type.READ, tableName, fields);
